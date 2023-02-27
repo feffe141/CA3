@@ -1,0 +1,217 @@
+import abc
+from PyQt5.QtCore import QObject, pyqtSignal
+from cardlib import *
+
+class QABCMeta(abc.ABCMeta, type(QObject)):
+    pass
+
+class CardsModel(QObject, metaclass=QABCMeta):
+    """ Base class that described what is expected from the CardsView widget. """
+
+    new_cards = pyqtSignal()  #: Signal should be emited when cards change.
+
+    #warning = pyqtSignal(str)
+
+    @abc.abstractmethod
+    def __iter__(self):
+        """Returns an iterator of card objects"""
+
+    @abc.abstractmethod
+    def flipped(self):
+        """Returns true of cards should be drawn face down"""
+
+    @abc.abstractmethod
+    def flip(self):
+        """Returns true of cards should be drawn face down"""
+
+
+class TableModel(CardsModel):
+    def __init__(self):
+        super().__init__()
+        self._cards = []
+
+    #def update(self):
+    #CardsModel nånting
+
+    def add_card(self, card):
+        # This method mutates the object, so we must of course
+        self._cards.append(card)
+        self.new_cards.emit()  # something changed, better emit the signal!
+
+    def add_cards(self, cards):
+        self._cards.extend(cards)
+        self.new_cards.emit()
+
+    def clear(self):
+        self._cards.clear()
+        self.new_cards.emit()
+
+    def __iter__(self):
+        return iter(self._cards)
+
+    def __len__(self):
+        return len(self._cards)
+
+    def flip(self):
+        pass
+
+    def flipped(self):
+        return False
+
+
+class HandModel(Hand, CardsModel):
+    def __init__(self):
+        Hand.__init__(self)
+        CardsModel.__init__(self)
+        # Additional state needed by the UI
+        self.flipped_cards = True
+
+    def __iter__(self):
+        return iter(self.cards)
+
+    def flip(self): # Flips over the cards (to hide them)
+        self.flipped_cards = not self.flipped_cards
+        self.new_cards.emit()  # something changed, better emit the signal!
+
+    def flipped(self):
+        # This model only flips all or no cards, so we don't care about the index.
+        return self.flipped_cards
+
+    def add_card(self, card):
+        super().add_card(card)
+        self.new_cards.emit()  # something changed, better emit the signal!
+
+
+
+class TexasHoldemModel(QObject):
+    winner = pyqtSignal(int)
+    player_turn_changed = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.deck = StandardDeck()
+        self.deck.shuffle()
+        self.table = TableModel()
+      #  self.pot = Balance()
+        self.players = [Player('Fredrik', init_money = 4000), Player('David', init_money = 2000)]
+        for p in self.players:
+            p.hand.add_card(self.deck.draw())
+            p.hand.add_card(self.deck.draw())
+        self.turn = 0
+
+    def next_turn(self):
+        self.turn = (self.turn + 1) % len(self.players)
+        #game.add_table_card #wants to call "add_table_card here
+        self.player_turn_changed.emit()
+
+    def new_round(self):
+        self.next_turn()
+        #drop cards
+
+    def call(self):
+
+        self.next_turn()
+
+    def raise_bet(self):
+        #check if money enough
+        #change money
+        #emit signal
+        self.next_turn()
+
+    def fold(self):
+
+        self.next_turn()
+
+    def add_table_card(self):
+        if len(self.table) == 0:
+            self.table.add_cards([self.deck.draw(), self.deck.draw(), self.deck.draw()])
+        elif len(self.table) == 3:
+            self.table.add_card(self.deck.draw())
+        elif len(self.table) == 4:
+            self.table.add_card(self.deck.draw())
+        else:
+            pass
+            #self.new_round()
+
+    def check_winner(self):
+
+        player1_besthand = self.players[0].hand.best_poker_hand(self.table._cards)
+        player2_besthand = self.players[1].hand.best_poker_hand(self.table._cards)
+
+        if player1_besthand < player2_besthand:
+            print(player_2.name, "won with", player1_besthand)
+        elif player1_besthand == player2_besthand:
+            print(player_1.name, "and", player_2.name, "Tied")
+        else:
+            print(player_1.name, "won with", player1_besthand)
+
+        #starta en ny runda
+
+
+class Player():
+    def __init__(self, name, init_money):
+        super().__init__()
+        self.name = name
+        #self.balance = 1000
+        self.balance = Balance(init_money)
+        self.hand = HandModel()
+        self.bet = 100 #should be chooseable
+
+
+class Balance(QObject):
+    balance_changed = pyqtSignal()
+    def __init__(self, init_money):
+        super().__init__()
+        self.amount = init_money
+
+  #  def __init__(self, init_money):
+  #      super().__init__()
+  #      self.balance = init_money
+
+  #  def __iadd__(self, other: int):
+  #      self.value += other
+  #      self.balance_changed.emit
+
+
+active_player = 2
+player1_bet = 1000
+player2_bet = 2000
+whichplayer = [1, 2]
+player1_balance = 15000
+player2_balance = 360000
+
+game = TexasHoldemModel()
+player_1 = game.players[0]
+player_2 = game.players[1]
+player1_hand = player_1.hand
+player2_hand = player_2.hand
+"""
+print(player_1.name, player1_hand)
+print(player_2.name, player2_hand)
+"""
+"""
+tablecards = []
+d = StandardDeck()
+d.shuffle()
+tablecards.append(d.draw())
+tablecards.append(d.draw())
+tablecards.append( d.draw())
+"""
+
+#tablecards = []
+game.add_table_card()
+game.add_table_card()
+game.add_table_card()
+#game.next_turn()   #wants to call "next_turn" to add table card and emit that the player turned changed
+
+#game.add_table_card()
+#game.add_table_card()
+"""
+print(game.table._cards)
+print(game.check_winner())
+print(game.players[0].balance.amount)
+print(game.players[1].balance.amount)
+print(game.turn)
+"""
+#tablesendyes = game.table.cardsmodel
+
