@@ -1,0 +1,16 @@
+from pokerview import *
+from pokermodel import *
+import sys
+
+playernames = ['Fredrik', 'David']
+playerbalances = [20000, 30000]
+game = TexasHoldemModel(playernames, playerbalances)
+player_1 = game.players[0]
+player_2 = game.players[1]
+player1_hand = player_1.hand
+player2_hand = player_2.hand
+
+qt_app = QApplication(sys.argv)
+view = TexasHoldemView(game)
+view.show()
+qt_app.exec_()
