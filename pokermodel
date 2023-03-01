@@ -87,13 +87,13 @@ class TexasHoldemModel(QObject):
     winner = pyqtSignal(int)
     player_turn_changed = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self,playernames,playerbalances):
         super().__init__()
         self.deck = StandardDeck()
         self.deck.shuffle()
         self.table = TableModel()
-      #  self.pot = Balance()
-        self.players = [Player('Fredrik', init_money = 4000), Player('David', init_money = 2000)]
+        self.pot = 0 #  self.pot = Balance()
+        self.players = [Player(playernames[0], init_money = playerbalances[0]), Player(playernames[1], init_money = playerbalances[1])]
         for p in self.players:
             p.hand.add_card(self.deck.draw())
             p.hand.add_card(self.deck.draw())
@@ -102,6 +102,9 @@ class TexasHoldemModel(QObject):
     def next_turn(self):
         self.turn = (self.turn + 1) % len(self.players)
         #game.add_table_card #wants to call "add_table_card here
+        print('next turn called')
+        print(game.turn)
+        print(self.turn)
         self.player_turn_changed.emit()
 
     def new_round(self):
@@ -155,7 +158,7 @@ class Player():
         #self.balance = 1000
         self.balance = Balance(init_money)
         self.hand = HandModel()
-        self.bet = 100 #should be chooseable
+        self.bet = 0 #should be chooseable
 
 
 class Balance(QObject):
@@ -180,7 +183,9 @@ whichplayer = [1, 2]
 player1_balance = 15000
 player2_balance = 360000
 
-game = TexasHoldemModel()
+playernames = ['Fredrik', 'David']
+playerbalances = [20000, 30000]
+game = TexasHoldemModel(playernames, playerbalances)
 player_1 = game.players[0]
 player_2 = game.players[1]
 player1_hand = player_1.hand
@@ -214,4 +219,5 @@ print(game.players[1].balance.amount)
 print(game.turn)
 """
 #tablesendyes = game.table.cardsmodel
+
 
