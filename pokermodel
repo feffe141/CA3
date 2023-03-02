@@ -30,9 +30,6 @@ class TableModel(CardsModel):
         super().__init__()
         self._cards = []
 
-    #def update(self):
-    #CardsModel nånting
-
     def add_card(self, card):
         # This method mutates the object, so we must of course
         self._cards.append(card)
@@ -82,142 +79,153 @@ class HandModel(Hand, CardsModel):
         self.new_cards.emit()  # something changed, better emit the signal!
 
 
-
 class TexasHoldemModel(QObject):
-    winner = pyqtSignal(int)
+    winner_found = pyqtSignal(str)
     player_turn_changed = pyqtSignal()
+    money_changed = pyqtSignal()
+    raised_twice = pyqtSignal()
+    no_raise = pyqtSignal()
+    player_ran_out_of_money = pyqtSignal(str)
 
     def __init__(self,playernames,playerbalances):
         super().__init__()
         self.deck = StandardDeck()
         self.deck.shuffle()
         self.table = TableModel()
-        self.pot = 0 #  self.pot = Balance()
         self.players = [Player(playernames[0], init_money = playerbalances[0]), Player(playernames[1], init_money = playerbalances[1])]
-        for p in self.players:
-            p.hand.add_card(self.deck.draw())
-            p.hand.add_card(self.deck.draw())
+        self.pot = 0
+        for player in self.players:
+            player.hand.add_card(self.deck.draw())
+            player.hand.add_card(self.deck.draw())
         self.turn = 0
+        self.notturn = 1
+        self.call_count = 0
+        self.raise_count = 0
+        self.player_folded = False
+        self.player_called = False
+
 
     def next_turn(self):
         self.turn = (self.turn + 1) % len(self.players)
-        #game.add_table_card #wants to call "add_table_card here
-        print('next turn called')
-        print(game.turn)
-        print(self.turn)
+        self.notturn = (self.notturn + 1) % len(self.players)
         self.player_turn_changed.emit()
 
     def new_round(self):
-        self.next_turn()
-        #drop cards
+        if self.player_folded == True:
+            self.winner = self.turn
+            self.player_folded = False
+        else:
+            self.self.check_winner()
+            self.add_table_card()
+            self.player_turn_changed.emit()
+        self.new_game()
+
+    def new_game(self):
+        self.table.clear()
+        self.deck = StandardDeck()
+        self.deck.shuffle()
+        self.call_count = 0
+        self.raise_count = 0
+        self.pot = 0
+        for player in range(2):
+            self.players[player].hand.drop_cards([0,1])
+            self.players[player].hand.add_card(self.deck.draw())
+            self.players[player].hand.add_card(self.deck.draw())
 
     def call(self):
+        self.player_called = True
+        self.call_count += 1
+        self.raise_count = 0
+        self.no_raise.emit()
 
+        if self.players[self.turn].money_amount >= self.bet:
+            self.players[self.turn].remove_money(self.bet)
+        else:
+            self.players[self.turn].remove_money(self.players[self.turn].money_amount)
+        self.pot += self.bet
+        self.bet = 0
+
+        if self.call_count > 1:
+            self.call_count = 0
+            self.add_table_card()
+        self.money_changed.emit()
         self.next_turn()
 
-    def raise_bet(self):
-        #check if money enough
-        #change money
-        #emit signal
+    def raise_bet(self, value):
+        self.players[self.turn].remove_money(value)
+        self.bet = value
+        self.pot += self.bet
+        self.call_count += 1
+        if self.call_count > 2:
+            self.call_count = 0
+        self.raise_count += 1
+        if self.raise_count > 1:
+            self.raised_twice.emit()
+        self.money_changed.emit()
         self.next_turn()
 
     def fold(self):
-
+        self.players[self.notturn].add_money(self.pot)
+        self.winner_found.emit(f"{self.players[self.notturn].name} won {self.pot} sek, because {self.players[self.turn].name} folded!")
+        self.pot = 0
+        if self.players[self.turn].money_amount == 0:
+            self.player_ran_out_of_money.emit(self.players[self.turn].name)
+        self.money_changed.emit()
         self.next_turn()
+        self.new_game()
+
+    def split_pot(self):
+        self.players[0].add_money(self.pot/2)
+        self.players[1].add_money(self.pot/2)
+        self.money_changed.emit()
 
     def add_table_card(self):
         if len(self.table) == 0:
             self.table.add_cards([self.deck.draw(), self.deck.draw(), self.deck.draw()])
-        elif len(self.table) == 3:
+        elif len(self.table) == 3 or len(self.table) == 4:
             self.table.add_card(self.deck.draw())
-        elif len(self.table) == 4:
-            self.table.add_card(self.deck.draw())
-        else:
-            pass
-            #self.new_round()
+        elif len(self.table) == 5:
+            self.check_winner()
 
     def check_winner(self):
-
         player1_besthand = self.players[0].hand.best_poker_hand(self.table._cards)
         player2_besthand = self.players[1].hand.best_poker_hand(self.table._cards)
-
         if player1_besthand < player2_besthand:
-            print(player_2.name, "won with", player1_besthand)
+            self.winner_found.emit(f"{self.players[1].name} won {self.pot} sek, with {player1_besthand}!")
+            self.players[1].add_money(self.pot)
         elif player1_besthand == player2_besthand:
-            print(player_1.name, "and", player_2.name, "Tied")
+            self.winner_found.emit(f"{self.players[0].name} and {self.players[1].name} tied, with {player1_besthand}, getting {self.pot/2} sek each!")
+            self.split_pot()
         else:
-            print(player_1.name, "won with", player1_besthand)
+            self.winner_found.emit(f"{self.players[0].name} won {self.pot} sek, with {player1_besthand}!")
+            self.players[0].add_money(self.pot)
+        if self.players[self.turn].money_amount == 0:
+            self.player_ran_out_of_money.emit(self.players[self.turn].name)
+        else:
+            pass
+        self.money_changed.emit()
+        self.new_game()
 
-        #starta en ny runda
 
-
-class Player():
+class Player(QObject):
+    bet_changed = pyqtSignal()
+    balance_changed = pyqtSignal()
     def __init__(self, name, init_money):
         super().__init__()
         self.name = name
-        #self.balance = 1000
-        self.balance = Balance(init_money)
+        self.balance = init_money
         self.hand = HandModel()
-        self.bet = 0 #should be chooseable
+        self.pot = 0
+        self.start_money = init_money
+        self.money_amount = self.start_money
 
+    def remove_money(self, amount: int):
+        self.money_amount -= amount
+        self.pot += amount
+        self.balance_changed.emit()
 
-class Balance(QObject):
-    balance_changed = pyqtSignal()
-    def __init__(self, init_money):
-        super().__init__()
-        self.amount = init_money
-
-  #  def __init__(self, init_money):
-  #      super().__init__()
-  #      self.balance = init_money
-
-  #  def __iadd__(self, other: int):
-  #      self.value += other
-  #      self.balance_changed.emit
-
-
-active_player = 2
-player1_bet = 1000
-player2_bet = 2000
-whichplayer = [1, 2]
-player1_balance = 15000
-player2_balance = 360000
-
-playernames = ['Fredrik', 'David']
-playerbalances = [20000, 30000]
-game = TexasHoldemModel(playernames, playerbalances)
-player_1 = game.players[0]
-player_2 = game.players[1]
-player1_hand = player_1.hand
-player2_hand = player_2.hand
-"""
-print(player_1.name, player1_hand)
-print(player_2.name, player2_hand)
-"""
-"""
-tablecards = []
-d = StandardDeck()
-d.shuffle()
-tablecards.append(d.draw())
-tablecards.append(d.draw())
-tablecards.append( d.draw())
-"""
-
-#tablecards = []
-game.add_table_card()
-game.add_table_card()
-game.add_table_card()
-#game.next_turn()   #wants to call "next_turn" to add table card and emit that the player turned changed
-
-#game.add_table_card()
-#game.add_table_card()
-"""
-print(game.table._cards)
-print(game.check_winner())
-print(game.players[0].balance.amount)
-print(game.players[1].balance.amount)
-print(game.turn)
-"""
-#tablesendyes = game.table.cardsmodel
+    def add_money(self, amount: int):
+        self.money_amount += amount
+        self.balance_changed.emit()
 
 
