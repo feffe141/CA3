@@ -3,7 +3,7 @@ from pokermodel import *
 import sys
 
 playernames = ['Fredrik', 'David']
-playerbalances = [20000, 30000]
+playerbalances = [1000, 800]
 game = TexasHoldemModel(playernames, playerbalances)
 player_1 = game.players[0]
 player_2 = game.players[1]
