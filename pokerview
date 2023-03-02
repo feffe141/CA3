@@ -83,8 +83,6 @@ class CardsView(QGraphicsView):
             c.setPos(c.position * self.card_spacing, 0)
             self.scene.addItem(c)
 
-        self.update_view()
-
     def update_view(self):
         scale = (self.viewport().height()-2*self.padding)/(313*1.25)
         self.resetTransform()
@@ -113,33 +111,44 @@ class MyTableView(QGroupBox):
 class TableContent(QGroupBox):
     def __init__(self, game):
         super().__init__()
-        self.pot = game.pot
+        self.game = game
         tablecontent_layout = QVBoxLayout()
         self.setLayout(tablecontent_layout)
 
         #Total pot
         totalpot_layout = QHBoxLayout()
-        total_pot = QLabel(f"Total pot: {self.pot} sek")
+        self.total_pot = QLabel(f"Total pot: {self.game.pot} sek")
 
-        totalpot_layout.addWidget(total_pot)
+        totalpot_layout.addWidget(self.total_pot)
         totalpot_layout.setAlignment(Qt.AlignCenter)
 
         #Player bets
         playerbets_layout = QHBoxLayout()
-        p1bet_label = QLabel(f"Player 1's total bets: {game.players[0].bet}")
-        p2bet_label = QLabel(f"Player 2's total bets: {game.players[1].bet}")
-        playerbets_layout.addWidget(p1bet_label)
-        playerbets_layout.addWidget(p2bet_label)
+        """
+        self.p1bet_label = QLabel(f"Player 1's bet amount this round: {self.game.players[0].bet}     ")
+        print(self.game.players[0].bet)
+        self.p2bet_label = QLabel(f"Player 2's bet amount this round: {self.game.players[1].bet}")
+        playerbets_layout.addWidget(self.p1bet_label)
+        playerbets_layout.addWidget(self.p2bet_label)
         playerbets_layout.setAlignment(Qt.AlignCenter)
-
+        """
         # Adding total pot- and player bets layouts togheter
         tablecontent_layout.addLayout(totalpot_layout)
         tablecontent_layout.addLayout(playerbets_layout)
 
-        self.update_view()
+        # Connect logic
+   #    self.game.players[self.game.turn].balance_changed.connect(self.bet_change)
+        self.game.money_changed.connect(self.update_view)
+    """
+    def bet_change(self):
+        print("BET CHANGE CALLED")
+        print(self.game.players[0].bet)
+        self.p1bet_label.setText(f"Player 1's bet amount this round: {self.game.players[0].bet}")
+        self.p2bet_label.setText(f"Player 1's bet amount this round: {self.game.players[1].bet}")     
+    """
 
     def update_view(self):
-        pass
+        self.total_pot.setText(f"Total pot: {self.game.pot} sek")
 
 class PlayersActionView(QGroupBox):
     def __init__(self, game):
@@ -157,89 +166,120 @@ class ActionView(QGroupBox):
     def __init__(self, game):
         super().__init__('Action Buttons')
         self.game = game
+        self.active_player = self.game.turn
+        self.player_balance = game.players[self.active_player].money_amount
         action_layout = QVBoxLayout()
         self.setLayout(action_layout)
+
 
         # Call/Raise Bet/Fold Action Section
 
         self.call_button = QPushButton(f"Call")
-        self.call_button.setFixedSize(QtCore.QSize(200, 140))
+        self.call_button.setFixedSize(QtCore.QSize(200, 110))
         action_layout.addWidget(self.call_button)
         action_layout.setAlignment(Qt.AlignCenter)
 
-        self.raise_bet_button = QPushButton(f"Raise Bet")
-        self.raise_bet_button.setFixedSize(QtCore.QSize(200, 140))
+        self.raise_bet_button = QPushButton(f"Bet")
+        self.raise_bet_button.setFixedSize(QtCore.QSize(200, 110))
         action_layout.addWidget(self.raise_bet_button)
         action_layout.setAlignment(Qt.AlignCenter)
 
+        # Bet amount
+        self.bet_box = QSpinBox(self)
+        self.bet_box.setMinimum(50)
+        if self.game.players[self.game.turn].money_amount > self.game.players[self.game.notturn].money_amount:
+            self.bet_box.setMaximum(self.game.players[self.game.notturn].money_amount)
+        else:
+            self.bet_box.setMaximum(self.game.players[self.game.turn].money_amount)
+        self.bet_box.setSingleStep(50)
+        self.bet_box.setPrefix("Raise Bet: ")
+        self.bet_box.setSuffix("SEK")
+        self.bet_box.setFixedSize(QtCore.QSize(200, 90))
+        action_layout.addWidget(self.bet_box)
+
         self.fold_button = QPushButton(f"Fold")
-        self.fold_button.setFixedSize(QtCore.QSize(200, 140))
+        self.fold_button.setFixedSize(QtCore.QSize(200, 110))
         action_layout.addWidget(self.fold_button)
         action_layout.setAlignment(Qt.AlignCenter)
 
         # Controller part
 
-        def call():
+        def call_view():
             game.call()
 
-        def raise_bet():
-            game.raise_bet()
+        def raise_bet_view():
+            self.value = self.bet_box.value()
+            game.raise_bet(self.value)
 
-        def fold():
+        def fold_view():
             game.fold()
 
         # Connect logic
+        self.game.player_turn_changed.connect(self.update_view)
+        self.game.raised_twice.connect(self.remove_raise_view)
+        self.game.no_raise.connect(self.add_raise_view)
 
-        self.call_button.clicked.connect(call)
-        self.raise_bet_button.clicked.connect(raise_bet)
-        self.fold_button.clicked.connect(fold)
+        self.call_button.clicked.connect(call_view)
+        self.raise_bet_button.clicked.connect(raise_bet_view)
+        self.fold_button.clicked.connect(fold_view)
 
+    def update_view(self):
+        if self.game.players[self.game.turn].money_amount > self.game.players[self.game.notturn].money_amount:
+            self.bet_box.setMaximum(self.game.players[self.game.notturn].money_amount)
+        else:
+            self.bet_box.setMaximum(self.game.players[self.game.turn].money_amount)
+
+    def remove_raise_view(self):
+        self.raise_bet_button.hide()
+
+    def add_raise_view(self):
+        self.raise_bet_button.show()
 
 
 class PlayerView(QGroupBox):
     def __init__(self, whichplayer, game):
         super().__init__(game.players[whichplayer].name)
 
-        self.player_balance = game.players[whichplayer].balance.amount
+        self.player_balance = game.players[whichplayer].money_amount
         self.player_hand = game.players[whichplayer].hand
-        self.active_player = game.turn
+        self.game = game
+        self.active_player = self.game.turn
+        self.whichplayer = whichplayer
 
         player_view_layout = QHBoxLayout()
         self.setLayout(player_view_layout)
 
         #Active player/Balance/Bet-amount layout
         balancebet_layout = QVBoxLayout()
+        self.active_playerlabel = QLabel("Your turn")
+        balancebet_layout.addWidget(self.active_playerlabel)
 
-        if whichplayer == self.active_player:     #Shows the active player
-            active_playerlabel = QLabel("Your turn")
-            balancebet_layout.addWidget(active_playerlabel)
+        if self.whichplayer != self.active_player:
+            self.active_playerlabel.hide()
+        else:
+            pass
 
         # Balance
-        balance_label = QLabel(f"Balance: {self.player_balance} sek")
-
-        # Bet amount
-        bet_box = QSpinBox()
-        bet_box.setMinimum(0)
-        bet_box.setMaximum(self.player_balance)
-        bet_box.setSingleStep(50)
-        bet_box.setPrefix("Bet: ")
-        bet_box.setSuffix("SEK")
-        bet_box.setFixedSize(QtCore.QSize(250, 90))
+        self.balance_label = QLabel(f"Balance: {self.player_balance} sek")
 
         # Adds to layout
-        balancebet_layout.addWidget(balance_label)
-        balancebet_layout.addWidget(bet_box)
-        balancebet_layout.setAlignment(Qt.AlignBottom)
-
+        balancebet_layout.addWidget(self.balance_label)
+        balancebet_layout.setAlignment(Qt.AlignCenter)
 
         # Cards/Flip
         cardsflip_layout = QVBoxLayout()
 
         # Flip button
-        if whichplayer == self.active_player:
-            button = QPushButton("Hide/Show Cards")
-            button.clicked.connect(self.player_hand.flip)
-            cardsflip_layout.addWidget(button)
+        self.activebutton = QPushButton("Hide/Show Cards")
+        self.activebutton.clicked.connect(self.player_hand.flip)
+        cardsflip_layout.addWidget(self.activebutton)
+
+
+
+        if self.whichplayer != self.active_player:
+            self.activebutton.hide()
+        else:
+            pass
 
         # Cards on hand
         cards_on_hand = CardsView(self.player_hand, card_spacing=250, padding=10)
@@ -247,18 +287,46 @@ class PlayerView(QGroupBox):
 
 
         # Adding layouts together
-        player_view_layout.addLayout(balancebet_layout)
-        player_view_layout.addLayout(cardsflip_layout)
+        if self.whichplayer == self.active_player:
+            player_view_layout.addLayout(cardsflip_layout)
+            player_view_layout.addLayout(balancebet_layout)
 
-        self.update_view()
+        else:
+            player_view_layout.addLayout(balancebet_layout)
+            player_view_layout.addLayout(cardsflip_layout)
+
+
+        # Connect logic
+        self.game.player_turn_changed.connect(self.update_view)
+        self.game.money_changed.connect(self.update_view)
+
+    def update_bet(self):
+        self.game.raise_bet(self.bet_box.value())
 
     def update_view(self):
-        pass
 
+        if self.whichplayer != self.active_player:
+            self.activebutton.show()
+            self.active_playerlabel.show()
+            self.balance_label.setText(f"Balance: {self.game.players[self.game.turn].money_amount} sek")
+        else:
+            self.balance_label.setText(f"Balance: {self.game.players[self.game.notturn].money_amount} sek")
+            self.activebutton.hide()
+            self.active_playerlabel.hide()
+            if self.player_hand.flipped() == False:
+                self.player_hand.flip()
+            else:
+                pass
+
+        self.active_player = self.game.turn
 
 class TexasHoldemView(QWidget):
     def __init__(self, game):
         super().__init__()
+        self.turn = game.turn
+        self.notturn = game.notturn
+        self.player_hand = game.players[self.turn].hand
+        self.otherplayer_hand = game.players[self.notturn].hand
 
         vbox = QVBoxLayout()
         vbox.addWidget(MyTableView(game))
@@ -268,49 +336,22 @@ class TexasHoldemView(QWidget):
         self.setWindowState(Qt.WindowMaximized)
         self.setWindowTitle("Daves Dunkers: Texas hold'em")
 
+        # Connect logic
+        game.winner_found.connect(self.alert_winner)
+        game.player_ran_out_of_money.connect(self.alert_out_of_money)
 
     def alert_winner(self, text: str):
+        self.player_hand.flip()
+        self.otherplayer_hand.flip()
         msg = QMessageBox()
         msg.setText(text)
         msg.exec()
+        self.player_hand.flip()
+        self.otherplayer_hand.flip()
 
+    def alert_out_of_money(self, text: str):
+        msg = QMessageBox()
+        msg.setText(f'{text} ran out of money!')
+        msg.setInformativeText("Please visit <a href='https://stodlinjen.se/'>Stödlinjen</a> to get professional help!")
+        msg.exec()
 
-# Global variabels (Placeholder values, imported from model later) and Execution
-
-"""
-active_player = 2
-player1_bet = 1000
-player2_bet = 2000
-whichplayer = [1, 2]
-player1_balance = 15000
-player2_balance = 360000
-tablecards = TableModel()
-player1_hand = HandModel()
-player2_hand = HandModel()
-tablecards = HandModel()
-qt_app = QApplication(sys.argv)
-view = TexasHoldemView(tablecards)
-view.show()
-qt_app.exec_()
-"""
-"""
-playernames = ['Fredrik', 'David']
-playerbalances = [20000, 30000]
-game = TexasHoldemModel(playernames, playerbalances)
-#game.add_table_card()
-
-qt_app = QApplication(sys.argv)
-view = TexasHoldemView(game)
-
-print(player_1.name, game.players[0].hand)
-print(player_2.name, game.players[1].hand)
-print()
-print(game.table._cards)
-print(game.check_winner())
-#print(game.players[0].balance.amount)
-#print(game.players[1].balance.amount)
-#print(game.turn)
-
-view.show()
-qt_app.exec_()
-#"""
